@@ -1,37 +1,54 @@
 const fs = require("fs");
 const cli = require("cac")();
 const { getFileExtension, getFileName } = require("./lib/utils");
+const { exec } = require("child_process");
 
-const REGISTERED_FLAGS = ["f", "file", "d", "dir", "h", "help", "s", "snippet"];
+const REGISTERED_FLAGS = ["file", "dir", "help", "snippet", "config"];
 
-cli.option("-f", "--file <filename>", "Type a file name");
-cli.option("-d", "--dir <dirname>", "Type a dir name");
-cli.option("-s", "--snippet <snippet>", "Type a snippet name");
+init();
+
+cli.option("--file", "Type a file name");
+cli.option("--dir", "Type a dir name");
+cli.option("--snippet", "Type a snippet name");
+cli.option("--config", "Type a config path");
 cli.help();
 const parsed = cli.parse();
+console.log(parsed);
 
-handleUnregisteredOption(parsed.options);
-handleParsedOption(parsed.options);
+handleUnregisteredOption(parsed);
+handleParsedOption(parsed);
 
 function handleUnregisteredOption(options) {
   for (const flag of REGISTERED_FLAGS) {
     if (flag in options) return;
   }
-  throw new Error("Unregistered options");
+  exec("node index.js --help", (err, output) => {
+    // once the command has completed, the callback function is called
+    if (err) {
+      // log and return if we encounter an error
+      console.error("could not execute command: ", err);
+      return;
+    }
+    // log the output received from the command
+    console.log(output);
+  });
 }
 
-function handleFileOption(filename, snippetName) {
-  if (typeof filename === "boolean") throw new Error("Type a filename");
-  const snippetObj = JSON.parse(fs.readFileSync("snippet.json"));
+function handleFileOption(parsed) {
+  const { args, options } = parsed;
+  const filename = args[0];
+  if (args.length === 0) throw new Error("Type a filename");
+
+  const snippetPath = JSON.parse(fs.readFileSync("./config.json")).snippetPath;
+  const snippetObj = JSON.parse(fs.readFileSync(snippetPath));
 
   let snippet = [];
-  if (snippetName) {
+  if (options.snippet) {
     snippet = snippetObj[snippetName];
   } else {
     const extension = getFileExtension(filename);
     snippet = snippetObj[extension];
   }
-
   const name = getFileName(filename);
   for (const line of snippet) {
     const replaced = line.replace("$FILENAME", name);
@@ -40,17 +57,39 @@ function handleFileOption(filename, snippetName) {
     });
   }
 }
-function handleDirOption(dirname) {
-  if (typeof dirname === "boolean") throw new Error("Type a dirname");
+
+function handleDirOption(parsed) {
+  const { args } = parsed;
+  if (args.length === 0) throw new Error("Type a dirname");
 }
 
-function handleParsedOption(options) {
-  const snippet = options.snippet || options.s;
+function handleConfigOption(parsed) {
+  const path = parsed.options.config;
+  fs.writeFileSync(
+    "./config.json",
+    JSON.stringify({
+      snippetPath: path,
+    })
+  );
+}
 
-  if ("f" in options) handleFileOption(options.f, snippet);
-  if ("file" in options) handleFileOption(options.file, snippet);
-  if ("d" in options) handleDirOption(options.d);
-  if ("dir" in options) handleDirOption(options.dir);
+function handleParsedOption(parsed) {
+  const { options } = parsed;
+  if ("file" in options) handleFileOption(parsed);
+  if ("dir" in options) handleDirOption(parsed);
+  if ("config" in options) handleConfigOption(parsed);
 }
 
 // https://ourcodeworld.com/articles/read/393/how-to-create-a-global-module-for-node-js-properly
+
+function init() {
+  const isConfigExist = fs.existsSync("./sddsd.json");
+  if (!isConfigExist) {
+    fs.writeFileSync(
+      "./config.json",
+      JSON.stringify({
+        snippetPath: "./snippet.json",
+      })
+    );
+  }
+}
