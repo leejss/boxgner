@@ -1,6 +1,6 @@
 const fs = require("fs");
 const cli = require("cac")();
-const { getFileExtension, getFileName } = require("./lib/utils");
+const { getFileExtension, getFileName, isFileExist } = require("./lib/utils");
 const { exec } = require("child_process");
 
 const REGISTERED_FLAGS = ["file", "dir", "help", "snippet", "config"];
@@ -18,20 +18,21 @@ console.log(parsed);
 handleUnregisteredOption(parsed);
 handleParsedOption(parsed);
 
-function handleUnregisteredOption(options) {
+function handleUnregisteredOption(parsed) {
+  const { options } = parsed;
   for (const flag of REGISTERED_FLAGS) {
-    if (flag in options) return;
+    if (options[flag]) return;
   }
   exec("node index.js --help", (err, output) => {
     // once the command has completed, the callback function is called
     if (err) {
       // log and return if we encounter an error
       console.error("could not execute command: ", err);
-      return;
     }
     // log the output received from the command
     console.log(output);
   });
+  return;
 }
 
 function handleFileOption(parsed) {
@@ -39,16 +40,26 @@ function handleFileOption(parsed) {
   const filename = args[0];
   if (args.length === 0) throw new Error("Type a filename");
 
-  const snippetPath = JSON.parse(fs.readFileSync("./config.json")).snippetPath;
-  const snippetObj = JSON.parse(fs.readFileSync(snippetPath));
+  const snippetPath = JSON.parse(
+    fs.readFileSync(__dirname + "/config.json")
+  ).snippetPath;
+
+  const snippetObj = JSON.parse(fs.readFileSync(`${__dirname + snippetPath}`));
 
   let snippet = [];
+
   if (options.snippet) {
     snippet = snippetObj[snippetName];
   } else {
     const extension = getFileExtension(filename);
     snippet = snippetObj[extension];
   }
+
+  if (isFileExist(filename)) {
+    fs.unlinkSync(filename);
+  }
+
+  console.log({ filename });
   const name = getFileName(filename);
   for (const line of snippet) {
     const replaced = line.replace("$FILENAME", name);
@@ -66,7 +77,7 @@ function handleDirOption(parsed) {
 function handleConfigOption(parsed) {
   const path = parsed.options.config;
   fs.writeFileSync(
-    "./config.json",
+    `${__dirname}/config.json`,
     JSON.stringify({
       snippetPath: path,
     })
@@ -83,12 +94,12 @@ function handleParsedOption(parsed) {
 // https://ourcodeworld.com/articles/read/393/how-to-create-a-global-module-for-node-js-properly
 
 function init() {
-  const isConfigExist = fs.existsSync("./sddsd.json");
+  const isConfigExist = fs.existsSync(__dirname + "/config.json");
   if (!isConfigExist) {
     fs.writeFileSync(
-      "./config.json",
+      __dirname + "/config.json",
       JSON.stringify({
-        snippetPath: "./snippet.json",
+        snippetPath: `${__dirname}/snippet.json`,
       })
     );
   }
